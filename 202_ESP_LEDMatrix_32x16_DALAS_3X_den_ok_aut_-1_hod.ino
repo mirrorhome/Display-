@@ -14,7 +14,7 @@
       OneWire oneWireDS(pinCidlaDS);// vytvoření instance oneWireDS z knihovny OneWire
       DallasTemperature senzoryDS(&oneWireDS);// vytvoření instance senzoryDS z knihovny DallasTemperature
 
-      #define TIMEDHT 4500   //4500 zpozdeni testu čidel dalas
+      #define TIMEDHT 3000   //4500 zpozdeni testu čidel dalas
       #define NUM_MAX 16         //8 puvodně
       #define LINE_WIDTH 64    //32 puvodně ted 64.  // 128 nefunguje
                      
@@ -33,29 +33,25 @@
     // =======================================================================
     // Your config below!   flat
     // =======================================================================
-    const char* ssid     = "SSD";     // SSID of local network
-    const char* password = "PASSWORD";   // Password 
+    const char* ssid     = "SSID";     // SSID of local network
+    const char* password = "Password";   // Password 
       // =======================================================================
-     long utcOffset = 1;   //2                 // UTC for Česko zima =1 leto = 2
-    //   int summerTime = 0; // letni čas nefunguje  zima +1 leto +2
+     long utcOffset = 1;   //  nejede nechat 1  
+    //  změnit na ntpClient leto 7200, zima 3600
      long localEpoc = 0;   // 2 časový posun (utcOffset) 0 PŘIDÁNO NA 1 OPOŽDUJE SE DEN O 1 HOD
      long localMillisAtUpdate = 0; 
    /* 
-     TimeChangeRule myStandardTime = {"GMT", Last, Sun, Oct, 2, 1*60};     // {"GMT", First, Sun, Nov, 2, 1*60};
+    TimeChangeRule myStandardTime = {"GMT", Last, Sun, Oct, 2, 1*60};     // {"GMT", First, Sun, Nov, 2, 1*60};
     TimeChangeRule myDaylightSavingsTime = {"IST",Last , Sun, Mar, 1, 2 * 60};    //{"IST", Second, Sun, Mar, 1, 2 * 60};
     Timezone myTZ(myStandardTime, myDaylightSavingsTime);
-  //  long utcOffset = myTZ;
+  // long utcOffset = myTZ;
   */
-  
-    //=============================================================
-
-
-
+  //=============================================================
 
     WiFiUDP ntpUDP;
     HTTPClient http;
     WiFiClient client;
- NTPClient ntpClient(ntpUDP, "cz.pool.ntp.org", utcOffset * 3600, 60000*60);  // Aktualizace každou minutu(hodinu*60)
+ NTPClient ntpClient(ntpUDP, "cz.pool.ntp.org", utcOffset * 3600, 60000*60);  //utcOffset * 3600// Aktualizace každou minutu(hodinu*60)
    
       
        // Location  Karvina
@@ -117,7 +113,7 @@
       xPos=0;
       yPos=0;
    
-       printString("WI-FI CONNECT..", font3x7);
+       printString("WI-FI PRIPOJENI..", font3x7);
       refreshAll();
       while (WiFi.status() != WL_CONNECTED)  {
       delay(500); DEBUG(Serial.print("."));  }
@@ -143,7 +139,7 @@
       curTime = millis();
       if(curTime-updTime> 3600000) {    // 3600000 jedna hodina     600000 10 min
         updTime = curTime;
-       getNtpTime();                }             //  getTime();/////update time every 600s=10m
+       getNtpTime();                }      //  getTime();/////update time every 600s=10m
                                        
       dots = (curTime % 1000)<500;     // blikani 2 times/sec
       mode = (curTime % 60000)/15000;  // Změna displeje každých 20s = 20000 milisec // 4x 15 sec = 15000milis
@@ -209,7 +205,7 @@
                sendCmd(12,10,15);sendCmd(13,10,15);sendCmd(14,10,15);sendCmd(15,10,15); }
             if (teplota > 40 && teplota <=70)    { printString("  SAUNA", font3x7);  
               sendCmd(12,10,12);sendCmd(13,10,12);sendCmd(14,10,12);sendCmd(15,10,12); }
-            if (teplota <= 40 && teplota > 35)  { printString("SUPR HYC", font3x7);
+            if (teplota <= 40 && teplota > 35)  { printString("MALO HYC", font3x7);
               sendCmd(12,10,10);sendCmd(13,10,10);sendCmd(14,10,10);sendCmd(15,10,10); } 
               //(pozice,jas,intesita jasu) // intesita nastaveni jasu  0= min ,15 max 
             if (teplota <= 35 && teplota > 30)  { printString("BUDE HIC", font3x7);
@@ -366,9 +362,9 @@
       char txt2[4];
       char txt3[4];
       char str[6];
-      if (h < 8) { sprintf(txt2,"%.5s",(hoursToString(sunrise + utcOffset+1, str))); 
+      if (h < 8) { sprintf(txt2,"%.5s",(hoursToString(sunrise + utcOffset, str))); 
             printString(txt2,digits3x5);}     //font3x7
-      if (h >= 8) {sprintf(txt3,"%.5s",(hoursToString(sunset + utcOffset+1, str)));  
+      if (h >= 8) {sprintf(txt3,"%.5s",(hoursToString(sunset + utcOffset, str)));  
             printString(txt3,digits3x5);}     //font3x7
       
    //   for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=0;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
@@ -458,7 +454,7 @@
             yPos = 1;               //    y0 = nahoru
             xPos = 0;            //x vice je doprava 
             if (teplota3 > 45)                   { printString("TOPI HURA", font3x7); } 
-            if (teplota3 <= 45 && teplota3 > 40) { printString(" HYC", font3x7); } 
+            if (teplota3 <= 45 && teplota3 > 40) { printString("TOPI MALO", font3x7); } 
             if (teplota3 <= 40 && teplota3 > 35) { printString("TEPLO ", font3x7);
              printString("!",digits5x8rn); }  // srdce
             if (teplota3 <= 35 && teplota3 > 30) { printString(" VICE ", font3x7); 
@@ -677,7 +673,7 @@ void getNtpTime()
      {
   long curEpoch = localEpoc + ((millis() - localMillisAtUpdate) / 1000);
  // long temp_value_2 = round(curEpoch  * (utcOffset) + 86400L); // long temp_value_2 = round(curEpoch +3600 * (utcOffset) + 86400L);
-  long epoch = (long)(round(curEpoch + 3600 * utcOffset + 86400L)) % 86400L;
+  long epoch = (long)(round(curEpoch  * utcOffset + 86400L)) % 86400L;  // long epoch = (long)(round(curEpoch + 3600 * utcOffset + 86400L)) % 86400L;
  // long epoch = temp_value_2 % 86400L;
 
   h = ((epoch  % 86400L) / 3600) % 24;
