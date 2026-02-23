@@ -1,66 +1,81 @@
 
-//  27.9.2024-16.10.2025
+//  27.9.2024-7.1.2026
+/*
+    pouzite piny 
+      pinCidlaDS 5 =(senzoryDS)  Dalas 3x I2s= teplotni čidla
+    // DATA_PIN 15   for  MD_Parola P = MD_Parola = nepouzité
+      DIN_PIN 15 =display  (Led matrix 32x16)
+      CS_PIN  13 =display  (Led matrix 32x16)
+      CLK_PIN 12 =display  (Led matrix 32x16)
+      analogRead(A0) =fotosenzor
+      buzzer = D2; GPIO 4 // piezo
     
+*/    #include "melode.h"
+    //  #include "note.h" 
       #include <SolarCalculator.h>
-    //  #include <Timezone.h>
+    // #include <Timezone.h>
       #include <ESP8266WiFi.h>
       #include <ESP8266HTTPClient.h>
       #include <NTPClient.h>
       #include <WiFiUdp.h>
       #include "fonts.h"   
       #include <OneWire.h>
-      #include  <DallasTemperature.h> //<DS18B20Events.h>
+      #include <DallasTemperature.h> //<DS18B20Events.h>
       const int pinCidlaDS = 5;
       OneWire oneWireDS(pinCidlaDS);// vytvoření instance oneWireDS z knihovny OneWire
       DallasTemperature senzoryDS(&oneWireDS);// vytvoření instance senzoryDS z knihovny DallasTemperature
 
-      #define TIMEDHT 3000   //4500 zpozdeni testu čidel dalas
-      #define NUM_MAX 16         //8 puvodně
-      #define LINE_WIDTH 64    //32 puvodně ted 64.  // 128 nefunguje
-                     
-      // for NodeMCU 1.0/D1 mini
-      #define DIN_PIN 15  // 5   //15  
-    //  #define DATA_PIN 15    //for  MD_Parola P = MD_Parola
+      #define TIMEDHT 3000   //4500 zpozdeni A0 fotoresistor
+      #define NUM_MAX 16         
+      #define LINE_WIDTH 64    
+     
+  // for D1 mini
+      #define DIN_PIN 15  
+  //  #define DATA_PIN 15    //for  MD_Parola P = MD_Parola
       #define CS_PIN  13  
       #define CLK_PIN 12  
+  //***************************    
       #define MAX_DEVICES 16
       #define ROTATE  90     
       #define DEBUG(x)    // nechat 
-    //#define DEBUG(x) x
-     #include "max7219.h"   //nehybat nepojede program ~~
+      #include "max7219.h"   //nehybat nepojede program ~~
      int color = 0;  // klopny obvod pro svetlo zap a vyp 
-     int zrcadlo = 0;  // klopny obvod pro zrcadlo zap 
+     int zrcadlo = 0;// klopny obvod pro zrcadlo zap 
+     int ventilator2 = 0;// klopny obvod pro ventilator2 
+     int pipej  = 0;// klopny obvod pro pipani v poledne
     // =======================================================================
-    // Your config below!   flat
+            const char* ssid     = "XXXXXXX";     // SSID of local network
+            const char* password = "XXXXXXX";   // Password 
     // =======================================================================
-    const char* ssid     = "SSID";     // SSID of local network
-    const char* password = "Password";   // Password 
-      // =======================================================================
      long utcOffset = 1;   //  nejede nechat 1  
-    //  změnit na ntpClient leto 7200, zima 3600
      long localEpoc = 0;   // 2 časový posun (utcOffset) 0 PŘIDÁNO NA 1 OPOŽDUJE SE DEN O 1 HOD
      long localMillisAtUpdate = 0; 
-   /* 
-    TimeChangeRule myStandardTime = {"GMT", Last, Sun, Oct, 2, 1*60};     // {"GMT", First, Sun, Nov, 2, 1*60};
-    TimeChangeRule myDaylightSavingsTime = {"IST",Last , Sun, Mar, 1, 2 * 60};    //{"IST", Second, Sun, Mar, 1, 2 * 60};
-    Timezone myTZ(myStandardTime, myDaylightSavingsTime);
-  // long utcOffset = myTZ;
-  */
-  //=============================================================
+     
+     unsigned long lastTempRequest = 0;
+     const unsigned long tempInterval = 8000; // každých 5 sekund
+
+     
+     //=============================================================
 
     WiFiUDP ntpUDP;
     HTTPClient http;
     WiFiClient client;
- NTPClient ntpClient(ntpUDP, "cz.pool.ntp.org", utcOffset * 3600, 60000*60);  //utcOffset * 3600// Aktualizace každou minutu(hodinu*60)
+   // NTPClient ntpClient(ntpUDP, "cz.pool.ntp.org", 0, 60000); // co 1min
+
+      NTPClient ntpClient(ntpUDP, "cz.pool.ntp.org", 0, 3600000);  //utcOffset * 3600// Aktualizace každou minutu(hodinu*60)
    
-      
-       // Location  Karvina
-  double transit, sunrise, sunset;
-  double latitude = 49.8672914;
-  double longitude = 18.5555467;
+// ================ Hudební čas ===================================================
+      const int playTimes[] = { 845, 1915, 1930 }; // 9:00, 19:15, 19:30, 8:45
+      const int playTimesCount = sizeof(playTimes) / sizeof(playTimes[0]);
+// ================ Hudební čas = konec   =========================================   
+
+
+          // Location  Karvina
+      double transit, sunrise, sunset;
+      double latitude  = 49.8672914;
+      double longitude = 18.5555467;
 
    
-      uint16_t scrollPause = 0; // in milliseconds 1000
       uint8_t degC[] = { 6, 3, 3, 56, 68, 68, 68 }; // Deg C
       
         char str[10]; //oprava puvodně 0 
@@ -73,15 +88,14 @@
         String buf="";
         
         int clockOnly = 0;
-        float teplota  = .02f;
-        float teplota2 = .02f;
-        float teplota3 = .02f;
+        float teplota  = .01f;
+        float teplota2 = .01f;
+        float teplota3 = .01f;
         uint32_t timerDHT = TIMEDHT;
         int soucet;
         int mi;
         int prumer;
-    //------------------------------
-        
+        //------------------------------
         #define MAX_DIGITS 16
         byte dig[MAX_DIGITS]={0};
         byte digold[MAX_DIGITS]={0};
@@ -90,17 +104,15 @@
         long clkTime = 0;
         int dx=0, dy=0;
         int xPos=0, yPos=0;
-      //  int fan1 = 0;
-      //  int fan2 = 0;
-       
         byte del=0;
+
 //*************** nastaveni  void setup() *******************
-          void setup() 
+      void setup() 
     {
       buf.reserve(500);
       Serial.begin(115200);
       initMAX7219();
-     
+ 
       sendCmdAll(CMD_SHUTDOWN, 1);      // zapni display
       sendCmdAll(CMD_INTENSITY, 0); 
       sendCmd(12,10,1);
@@ -123,55 +135,94 @@
       DEBUG(Serial.println(""); Serial.print(" MyIP: "); Serial.println(WiFi.localIP());)
       printString((WiFi.localIP().toString()).c_str(), font3x7);
       refreshAll();
-       getNtpTime();
-      //getTime();
-
+      
+      // getNtpTime(); // getTime();
+     
+      senzoryDS.setWaitForConversion(false);
+      senzoryDS.setResolution(12);   // místo 12bit chne meřeni spatně 10bit cokoli pořad chyba 
       senzoryDS.begin();
    
+        // Nastavení časového pásma ČR + automatický letní čas
+                configTime(0, 0, "pool.ntp.org");
+                setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
+                tzset();
+
+                // POČKEJ na synchronizaci času
+                Serial.print("Cekam na NTP cas");
+                time_t now = time(nullptr);
+                while (now < 100000) {   // dokud neni realny cas
+                  delay(500);
+                  Serial.print(".");
+                  now = time(nullptr);
+                }
+                Serial.println(" OK");
+
+    } //-------nesahat------ ------------- 
+// -----------Konec---void setup()----------------------------- 
+
+            int dots,mode;  
+
+// ================ Hlavni smyčka void loop() ==== Nasteveni a zapnutí 4x Display ===================
+      void loop() {
+          unsigned long curTime = millis();
+          dots = (curTime % 1000) < 500;          // blikání tečky
+          mode = (curTime % 60000) / 15000;       // 15 sec režim změny displeje
+
+          // ---------- Aktualizace času ----------
+          updateMelody();
+          updateTime();
+          checkAndPlayMelody();
+
+          // ---------- Čtení jen aktivního čidla ----------
+          static unsigned long lastReadTime = 0;
+          if (curTime - lastReadTime > tempInterval) {
+              lastReadTime = curTime;
+              senzoryDS.requestTemperatures();
+
+        switch(mode) {
+            case 0:  // drawTime0 → venku
+                teplota = senzoryDS.getTempCByIndex(1);
+                if (teplota <= -127 || teplota != teplota) teplota = -99;
+// pokud blbnou čidla zapni
+                 Serial.println("CHYBA CIDLA 1" );
+                 Serial.println(teplota );
+                break;
+            case 1:  // drawTime2 → není teplota, přeskočit
+                break;
+            case 2:  // drawTime3 → radiator
+                teplota3 = senzoryDS.getTempCByIndex(2);
+                if (teplota3 <= -127 || teplota3 != teplota3) teplota3 = -99;
+                break;
+            case 3:  // drawTime1 → balkon
+                teplota2 = senzoryDS.getTempCByIndex(0);
+                if (teplota2 <= -127 || teplota2 != teplota2) teplota2 = -99;
+                break;
+                }
+            }
+
+    // ---------- Volba režimu displeje ----------
+    switch(mode) {
+        case 0: drawTime0(); break;
+        case 1: drawTime2(); break;
+        case 2: drawTime3(); break;
+        case 3: drawTime1(); break;
     }
-    // -----------end---void setup() -------nesahat------
-        unsigned int curTime,updTime=0;
-        int dots,mode;
-        
- // ================ Hlavni smyčka void loop() ==== Nasteveni a zapnutí 4x Display ===================
-  void loop()
-    {
-      curTime = millis();
-      if(curTime-updTime> 3600000) {    // 3600000 jedna hodina     600000 10 min
-        updTime = curTime;
-       getNtpTime();                }      //  getTime();/////update time every 600s=10m
-                                       
-      dots = (curTime % 1000)<500;     // blikani 2 times/sec
-      mode = (curTime % 60000)/15000;  // Změna displeje každých 20s = 20000 milisec // 4x 15 sec = 15000milis
-      updateTime();
-      // nezpomenout upravit Změna displeje na 15000 (15sec) pro jen 3x display
-     
-     if(mode==0) drawTime0();     //  zobrazeni velky Čas a zobrazení teploty Venku
-     if(mode==1) drawTime2();     //  zobrazeni maly  Čas a vychod, zapad, luminisence + den a datum
-     if(mode==2) drawTime3();     //  zobrazeni maly  Čas a teploty Radiator
-     if(mode==3) drawTime1();     //  zobrazení velky Čas a teploty Balkon
-     
-     
-       refreshAll(); 
-      calcSunriseSunset(year, month, day, latitude, longitude, transit, sunrise, sunset);
-    //-********************GPT pridano kontrola čidel *******
-    /*        int count = senzoryDS.getDeviceCount();
-      if (count > 0) teplota = senzoryDS.getTempCByIndex(0);
-      if (count > 1) teplota2 = senzoryDS.getTempCByIndex(1);
-      if (count > 2) teplota3 = senzoryDS.getTempCByIndex(2);
-    //--------------------------------------------------------
-  */ 
-      }
+
+    refreshAll();
+    calcSunriseSunset(year, month, day, latitude, longitude, transit, sunrise, sunset);
+}
+
 // ==============konec hlavni smyčky-----------------==============================================
-        
+   
+
         char* monthNames[] = {"LEDEN","UNOR","BREZEN","DUBEN","KVETEN","CERVEN","CERVENEC","SRPEN","ZARI","RIJEN","LISTOPAD","PROSINEC"};
         char txt[10];
-        static const char weekNames[7][10] PROGMEM ={"PONDELI"," UTERY"," STREDA","CTVRTEK","PATECEK","SOBOTKA"," NEDELE"};
+        static const char weekNames[7][10] PROGMEM ={" PONDELI"," UTERY"," STREDA"," CTVRTEK"," PATECEK"," SOBOTKA"," NEDELE"};
         char txt1[10];
         char buffer[10];
         char buffer1[10];
        
-      
+    
 //============== Display 0 ===========================
 
          void drawTime0()
@@ -189,28 +240,28 @@
           sprintf(txt,"%02d",m);
           printString(txt, digits7x16);
         //--------------------------------------
-            // Wait for a time TIMEDHT = 500 puvodně 4500
-          if ((millis() - timerDHT) > TIMEDHT) {
-            // Update the timer
-            timerDHT = millis(); // puvodne konec smyčky } 
-            senzoryDS.requestTemperatures();
-            teplota = (senzoryDS.getTempCByIndex(0)); }
-            
-          //-------------------------------------
-            yPos = 0;               //    y0 = nahoru
-            xPos = 33;            //x vice je doprava 
-          //   sendCmd(11,10,0);
+        
+  //------------  Poledne ----------------------------------------------------
+           
+         if (pipej == 0 && h == 12 && m == 0) { tone(4, 440, 120); delay (200); tone(4, 432, 120);  pipej  = 1;} 
+         if (pipej == 1 && h == 12 && m == 1) { pipej = 0;}
+ 
+ //teplota*******************************************************    
+    
+    //   sendCmd(11,10,0);
+        //(pozice,jas,intesita jasu) // intesita nastaveni jasu  0= min ,15 max 
+           yPos = 0;               //    y0 = nahoru
+           xPos = 33;            //x vice je doprava 
 
-            if (teplota > 70 )                  { printString("  HORII", font3x7);  
-               sendCmd(12,10,15);sendCmd(13,10,15);sendCmd(14,10,15);sendCmd(15,10,15); }
-            if (teplota > 40 && teplota <=70)    { printString("  SAUNA", font3x7);  
-              sendCmd(12,10,12);sendCmd(13,10,12);sendCmd(14,10,12);sendCmd(15,10,12); }
+
+           if (teplota > 45 )                  { printString("  HORII", font3x7);  
+              sendCmd(12,10,10);sendCmd(13,10,10);sendCmd(14,10,10);sendCmd(15,10,10); }
+            if (teplota > 40 && teplota <=45)    { printString("  SAUNA", font3x7);  
+              sendCmd(12,10,7);sendCmd(13,10,7);sendCmd(14,10,7);sendCmd(15,10,7); }
             if (teplota <= 40 && teplota > 35)  { printString("MALO HYC", font3x7);
-              sendCmd(12,10,10);sendCmd(13,10,10);sendCmd(14,10,10);sendCmd(15,10,10); } 
-              //(pozice,jas,intesita jasu) // intesita nastaveni jasu  0= min ,15 max 
+             sendCmd(12,10,5);sendCmd(13,10,5);sendCmd(14,10,5);sendCmd(15,10,5); } 
             if (teplota <= 35 && teplota > 30)  { printString("BUDE HIC", font3x7);
-              sendCmd(12,10,5);sendCmd(13,10,5);sendCmd(14,10,5); sendCmd(15,10,5); } 
-             //(pozice,jas,intesita jasu) // intesita nastaveni jasu  0= min ,15 max 
+              sendCmd(12,10,3);sendCmd(13,10,3);sendCmd(14,10,3); sendCmd(15,10,5); } 
             if (teplota <= 30 && teplota > 25)  { printString("  TEPLO", font3x7);
               sendCmd(12,10,2);sendCmd(13,10,2);sendCmd(14,10,2); sendCmd(15,10,2); }
             if (teplota <= 25 && teplota > 20)  { printString(" TEPLEJI", font3x7); } 
@@ -218,90 +269,94 @@
               sendCmd(12,10,1);sendCmd(13,10,1);sendCmd(14,10,1); sendCmd(15,10,1); }
             if (teplota <= 15 && teplota > 10)  { printString("   ZIMA", font3x7); }     
             if (teplota <= 10 && teplota > 5)   { printString("   KOSA", font3x7); }  
-            if (teplota <= 5 && teplota > 0)    { printString(" MRAZIK", font3x7); } 
-            if (teplota <= 0 && teplota > -5)   { printString("  LEDIK", font3x7); }
-            if (teplota <= -5 && teplota >-10)  { printString("  NANUK", font3x7); }
-            if (teplota <= -10 && teplota >-15) { printString(" MRAZAK", font3x7); }
-            if (teplota <= -15 && teplota >-25) { printString("SARKOFAG", font3x7); } 
-            if (teplota <= -127)                { printString("  ERROR", font3x7); 
-                 sendCmd(12,10,1);sendCmd(13,10,1);sendCmd(14,10,1); sendCmd(15,10,1);}
-                         
-          //  for(int i=0;i<32;i++) scr[32+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu       
-
-            yPos = 1;                 //    y0 = nahoru   y1 = dolu
-            xPos = 41;                //x vice je doprava 
-              sprintf(txt,"%.1f",teplota);
-              printString(txt,font3x7 ); 
-              printString("'C", font3x7); 
+            if (teplota <= 5 && teplota >= 0)   { printString("  MRAZIK", font3x7);} 
+            if (teplota < 0 && teplota > -5)    { printString("   LEDIK", font3x7);}
+            if (teplota <= -5 && teplota >-10)  { printString("   NANUK", font3x7); }
+            if (teplota <= -10 && teplota >-15) { printString("    RUMIK", font3x7); }
+            if (teplota <= -15 && teplota >-20) { printString("    MRAZAK", font3x7);} 
+            if (teplota <= -20 && teplota >-25) { printString("SARKOFAG", font3x7);} 
+            if (teplota == -99)                { printString("   ERROR", font3x7); 
+              sendCmd(12,10,1);sendCmd(13,10,1);sendCmd(14,10,1); sendCmd(15,10,1);}
+                      
+   //****************** Teplota venku ********************************************
+           yPos = 1;    // y0 = nahoru   y1 = dolu //xPos x  vice je doprava 
+               
+       if (teplota == -99)    { xPos = 43; printString("CIDLO", font3x7); }  //xPos = 42;
+     
+     //if (teplota >=10 ) { xPos =41; } 
+      if (teplota >=10  ) { xPos =43; } 
+      if (teplota >= 0 && teplota <  10 ) { xPos =42; } 
+      if (teplota < 0 && teplota > -9) { xPos =40; }  //xPos =41 //38
+      if (teplota < -9 && teplota > -10) { xPos =39; } 
+       if (teplota <= -10 ) { xPos =38; }
+       
+  else  { sprintf(txt,"%.1f",teplota);printString(txt,font3x7 ); printString("'C", font3x7);}
+           
+              
      //  ZAJIMAVE NEJEDE TEPLOTA POKUD ODKOMENTUJI a hazi error
-     //  for(int i=64;i<96;i++) scr[96+i]<<=3;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
+     // for(int i=64;i<96;i++) scr[96+i]<<=3;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
      // for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;
-//------------end display 0   ---------------------------------------
-       }
-//--------------------------------------------------------
 
 
-//============== Display 1 ==========================
+        } //nesahat
+//--------------konec Display 0------------------------------------------
+
+//============== Display 1 ====Balkon ======================
     void drawTime1()
     {
        clr();
         yPos = 0;
         xPos = 0;
-       // xPos = (h>9) ? 0 : 1;   //GPT  //x vice je doprava 
+      
         sprintf(txt,"%02d",h); // gpt
-        //  sprintf(txt,"%d",h); sprintf(txt, (h < 10) ? "0%d" : "%d", h);
-
-        printString(txt, digits5x16rn);
+                printString(txt, digits5x16rn);
         if(dots) printCharX(':', digits5x16rn, xPos);
         xPos += 2;
         //xPos+=(h>=22 || h==20) ? 1 : 2;    //GPT   //x vice je doprava 
         sprintf(txt,"%02d",m);
         printString(txt, digits5x16rn);
-
         sprintf(txt,"%02d",s);
         printString(txt, font3x7);
-
+//-------------Teplota Balkon ----------------------------
        yPos = 0;
-       xPos = 36;  //   37            //x vice je doprava 
+       xPos = 38;  //   37            //x vice je doprava 
         printString("BALKON", font3x7);  
-   //-----------------------------------------
-    // Wait for a time TIMEDHT = 4500
-  if ((millis() - timerDHT) > TIMEDHT) {
-    // Update the timer
-    timerDHT = millis();// puvodne konec smyčky }
-    senzoryDS.requestTemperatures();
-    teplota2 = (senzoryDS.getTempCByIndex(1));   }
 
-    yPos = 1;
-    xPos = 41;                //x vice je doprava           
-        sprintf(txt,"%.01f",teplota2);
+      yPos = 1;     // xPos = 43;    //41            //x vice je doprava    
+      if (teplota2 >= 0 && teplota2 < 10 ) { xPos =43; }
+      if (teplota2 <0 ) { xPos =38; } 
+      if (teplota2 >=10 ) { xPos =40; }           
+        sprintf(txt,"%.01f",teplota2); // (teplota2=balkon) (teplota) čidlo venkovní
         printString(txt, font3x7);    
         printString("'C", font3x7);   
       // for(int i=64;i<128;i++) scr[128+i]<<=3;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
        //  for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
- 
- //*******************automaticke zrcadlo *************************************************************
-  //--------------denne zrcadlo zap 10 hod ------------------------
+    //============== Display 1 ====Balkon ====================== 
+
+
+    
+
+//*******************automaticke zrcadlo *************************************************************
+     //--------------denne zrcadlo zap 10 hod ------------------------
       if ( zrcadlo == 0 && h == 10 && m == 0) { zrcadlo = 1;  // printString("zrcadlo:", font3x7); 
-          http.begin(client,"http://192.168.0.200/5/off"); http.GET();  http.end();} 
+          http.begin(client,"http://192.168.0.200/5/on"); http.GET();  http.end();} 
             //  http.begin(client,"http://192.168.0.210/16/on"); http.GET();  http.end();} // zapni cool
       if ( zrcadlo == 1 && h == 10 && m == 1) {  zrcadlo = 0; } 
 
     // ----------sobota zrcadlo zap 7hod ---------------------
       if ((dayOfWeek-1) == 5 && h == 7 && m == 0) { zrcadlo = 1;  // sobota (weekNames-1)==5
-          http.begin(client,"http://192.168.0.200/5/off"); http.GET();  http.end();} // zapni cool(zrcadlo) 
+          http.begin(client,"http://192.168.0.200/5/on"); http.GET();  http.end();} // zapni cool(zrcadlo) 
       if ( zrcadlo == 1 && h == 7 && m == 1) {  zrcadlo = 0; } 
     // ---------------nedele zrcadlo zap  7hod ---------------
       if ((dayOfWeek-1) == 6 && h == 7 && m == 0) { zrcadlo = 1;  // nedele  (weekNames-1)==6
-          http.begin(client,"http://192.168.0.200/5/off"); http.GET();  http.end();} // zapni cool(zrcadlo) 
+          http.begin(client,"http://192.168.0.200/5/on"); http.GET();  http.end();} // zapni cool(zrcadlo) 
       if ( zrcadlo == 1 && h == 7 && m == 1) {  zrcadlo = 0; }
      // Serial.println (dayOfWeek-1); //sobota ==5
 
-//---------------nesahat-----------------------------
-       }
-//---------------END DISPAY 1-----------------------------
+      }//---------------nesahat-----------------------------
+//---------------Konec DISPAY 1-----------------------------
 
-//============== Display 2 ==========================
+//============== Display 2 == Zapad východ ========================
         void drawTime2()
       {
         clr();
@@ -322,17 +377,13 @@
      
         yPos = 0;
         xPos = 34;      //x vice je doprava 
-    
- // int mereni = analogRead(A0); //cteni hodnoty fotorezistoru
-
-       // Wait for a time TIMEDHT = 4500
+      // Wait for a time TIMEDHT = 4500
           if ((millis() - timerDHT) > TIMEDHT) {
             // Update the timer
             timerDHT = millis(); // puvodne konec smyčky  
-            int mereni = analogRead(A0); 
+            int mereni = analogRead(A0); //cteni hodnoty fotorezistoru
             prumer = mereni /15 ;            } // prumer = (mereni / 15);
-                                       
-  //--------konec smyčky foto odporu  (mereni) 
+    //--------konec smyčky foto odporu  (mereni) 
 
   //---------------------zapnout a vypnout svetla  podle foto odporu  *********************************--------
 
@@ -340,19 +391,19 @@
      http.begin(client,"http://192.168.0.210/4/off"); http.GET();  http.end(); // vypni color
      http.begin(client,"http://192.168.0.210/13/off"); http.GET();  http.end(); // vypni color
         sendCmd(12,10,1);sendCmd(13,10,1);sendCmd(14,10,1); sendCmd(15,10,1);    }  
-    if (color == 0 && prumer < 26 && prumer > 20 && h >=15 && h <=22) {  color = 1; //printString("ZAPAD:", font3x7); 
+    if (color == 0 && prumer <= 27 && prumer > 21 && h >=15 && h <=22) {  color = 1; //printString("ZAPAD:", font3x7); 
      http.begin(client,"http://192.168.0.210/4/on"); http.GET();  http.end(); // zapni color
      http.begin(client,"http://192.168.0.210/13/on"); http.GET();  http.end(); // zapni color
        sendCmd(12,10,0);sendCmd(13,10,0);sendCmd(14,10,0); sendCmd(15,10,0);   }   
     
-   xPos = 53;  
-   yPos = 0;  //54
-   if (color == 0) {printString(")", font3x7); sprintf(mereni1,"%d",prumer); printString(mereni1,font3x7); }// ")" změněno na "|" s mezerama
-   if (color == 1) {printString("/", font3x7); sprintf(mereni1,"%d",prumer); printString(mereni1,font3x7); }// "/" zmeněno na "|"
-  
-   for(int i=0;i<32;i++) scr[32+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
-  // for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu   
-                                      
+      xPos = 53;  //54
+      yPos = 0;  
+      if (color == 0) {printString(")", font3x7); sprintf(mereni1,"%d",prumer); printString(mereni1,font3x7); }// ")" změněno na "|" s mezerama
+      if (color == 1) {printString("/", font3x7); sprintf(mereni1,"%d",prumer); printString(mereni1,font3x7); }// "/" zmeněno na "|"
+      
+      for(int i=0;i<32;i++) scr[32+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
+      // for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu   
+                                          
    
 
     //-------------------------- slunce ok--------------
@@ -371,40 +422,42 @@
       //------------- DEN MESIC ROK  V PRAVO DOLE ZONA (2) -------------------------
         yPos = 1;       // pozice nahoru=0 , dolu=1
         xPos = 35;        //32     --33     //x vice je doprava ;'][\=--0-]
-  //  const  char buffer = ("%02d.%02d.%2d",day,month,year-2000);
-            //   sprintf(buffer1,"%02d",day);printString(buffer1,digits3x5); 
-            //   sprintf(buffer,"%02d.%2d",month,year-2000);    
-          //  sendCmd(12,12,0);delay (50);
-    // sprintf(buffer1,"%02d.",day);   printString(buffer1,digits3x5); //dodano
-   //  sprintf(buffer,"%02d.%02d",month,year-2000);  
-     sprintf(buffer,"%02d.%02d.%2d",day,month,year-2000);
+       sprintf(buffer,"%02d.%02d.%2d",day,month,year-2000);
       printString(buffer,font3x7); 
-          //  sendCmd(12,12,1);
-                         //  P.displayZoneText(3, buffer, PA_LEFT, 35, 0, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
-          // printString(txt, font3x7);
-   //   for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
-    
-                       
-        
-    //----------------------DEN V TYDNU V LEVO DOLE ---------------------------------------
+         //  sendCmd(12,12,1);
+         // printString(txt, font3x7);
+         //  for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;    //  <<=1    vyška řadku :-) <<=1 je dole  vice je dolu
+          
+    //--------------automat  ++ DEN V TYDNU V LEVO DOLE ---------------------------------------
        yPos = 1;
        xPos = 1;
-      /*
-      sendCmd(12,10,1);   //jas=1 na pozici 12
-      sendCmd(13,10,1);
-      sendCmd(14,10,1);
-      sendCmd(15,10,1);
-      */
-      sprintf(txt,"%s",weekNames[dayOfWeek-1]);   // [dayOfWeek-1]
-      printString(txt, font3x7);   //font3x7   //numeric7Seg
-                 
-   for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1; 
+     bool zobrazeno = false;
+     
+      if       (month==12 && day==31 && h==12 && m>=3 && m<=10) { printString("SILVESTR", font3x7); zobrazeno = true;}
+      else if   (month==12 && day==31 && h==23 && m>=55) { printString("SILVESTR", font3x7); zobrazeno = true;}
+      else if   (month==1  && day==1  && h==0)  { printString("NOVY ROK", font3x7); zobrazeno = true;}
+      else if   (h==12 && m<3)  { printString(".POLEDNE.", font3x7); zobrazeno = true;}
+      
+      else if   (h==19 && m>=15 && m<=30) { printString("VEM LEKI", font3x7); zobrazeno = true;} 
+      else if   (h==8 &&  m>=45 && m<=59) { printString("VEM LEKI", font3x7); zobrazeno = true;} 
+     // else if   (h==18 &&  m>=10 && m<=11)  { printString("TESTIK", font3x7); zobrazeno = true;} 
+           // strcpy_P(txt, weekNames[dayOfWeek-1]);printString(txt, font3x7);
   
-  //----------------------------------------------------------
-      }      // nesahat------------
- //***************END DISPAY 2*********************************************  
+          
+         if (!zobrazeno) {
+         yPos = 1;
+         xPos = 1;
+         sprintf(txt, "%s", weekNames[dayOfWeek-1]);
+          printString(txt, font3x7); }
+          //  sprintf(txt,"%s",weekNames[dayOfWeek-1]), printString(txt, font3x7);
+              
+                for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1; 
+ 
+  
+     }      // nesahat------------
+//***************Konec DISPAY 2*********************************************  
 
-//-------------drawTime3------//void showAnimClock()----------------
+//-------------drawTime3------Radiator ----------------
         void drawTime3()
      {
         clr();
@@ -444,18 +497,13 @@
           }
           dy=0;
           setCol(15,dots ? B00100100 : 0);
-   //-------------- teplota radiator-----------------
-        // Wait for a time TIMEDHT = 6000
-          if ((millis() - timerDHT) > TIMEDHT) {
-            timerDHT = millis(); // puvodne konec smyčky } 
-            senzoryDS.requestTemperatures();
-            teplota3 = (senzoryDS.getTempCByIndex(2));   }
-        //-------------------------------------
+
+    //-------------- teplota radiator-----------------
             yPos = 1;               //    y0 = nahoru
             xPos = 0;            //x vice je doprava 
             if (teplota3 > 45)                   { printString("TOPI HURA", font3x7); } 
-            if (teplota3 <= 45 && teplota3 > 40) { printString("TOPI MALO", font3x7); } 
-            if (teplota3 <= 40 && teplota3 > 35) { printString("TEPLO ", font3x7);
+            if (teplota3 <= 45 && teplota3 > 40) { printString("TOPI MINI", font3x7); } 
+            if (teplota3 <= 40 && teplota3 > 35) { printString(" TEPLO ", font3x7);
              printString("!",digits5x8rn); }  // srdce
             if (teplota3 <= 35 && teplota3 > 30) { printString(" VICE ", font3x7); 
             printString("(#)",digits5x8rn);}    //$ nahoru
@@ -467,21 +515,55 @@
             if (teplota3 <= 20 && teplota3 > 15) { printString(" CHLADNO", font3x7); }
             if (teplota3 <= 15 && teplota3 > 10) { printString("    ZIMA", font3x7); }       
             if (teplota3 <= 10 && teplota3 > 0 ) { printString("ZMRZNEM ", font3x7); }  
-            if (teplota3 <= -127)                { printString("ERR.CIDLO ", font3x7); }  
+            if (teplota3 <= -99)                { printString("ERR.CIDLO ", font3x7); }  
            
             yPos = 0;   //    y0 = nahoru   y1 = dolu 
-            xPos = 34;   //x vice je doprava
+            xPos = 34;   //34  x vice je doprava
             printString("RADIATOR", font3x7);    
              
             yPos = 1;
-            xPos = 41;                
+            xPos = 39;   // 40             
             sprintf(txt,"%.1f",teplota3);
             printString(txt,font3x7 ); 
             printString("'C", font3x7); 
            for(int i=0;i<LINE_WIDTH;i++) scr[LINE_WIDTH+i]<<=1;
- 
-      }
-//========== čteni fontu ======================================
+
+//***********automat  Radiator ventilator >39 stupnu Celsia**************************
+  //  Serial.println(ventilator2);
+   // Serial.println(teplota3);
+        if  (ventilator2 == 0 && h > 8 && h < 21 && teplota3 > 39 && teplota3 < 45) { ventilator2 = 1;
+           http.begin(client,"http://192.168.0.200/2/on"); http.GET();  http.end(); }// zapni ventilator2
+       
+        if  (ventilator2 == 1 && teplota3 <= 39 ) { ventilator2 = 0;
+           http.begin(client,"http://192.168.0.200/2/off"); http.GET();  http.end(); }// zapni ventilator2
+        
+        if (ventilator2 == 1 && h>=21) { ventilator2 = 0;
+           http.begin(client,"http://192.168.0.200/2/off"); http.GET();  http.end();}
+      
+     
+  //----------------------------------------------------------------------      
+      }   // nesahat
+  //--------------konec display 2 ----------------------  
+
+
+     // ============ podrogramy ======================== 
+// ====== Funkce pro kontrolu a spuštění melodie ======
+        void checkAndPlayMelody() {
+         static int lastPlayedMinute = -1;
+         int key = h * 100 + m;
+         for (int i = 0; i < playTimesCount; i++) {
+         if (key == playTimes[i] && m != lastPlayedMinute) {
+         startMelody();
+         lastPlayedMinute = m;
+         break;      
+                  }                          }
+    // reset při změně minuty
+          if (m != lastPlayedMinute && player.playing == false) {
+          lastPlayedMinute = -1;
+              }       }
+  
+//**********************************************************************
+         //========== čteni fontu ======================================
       int charWidth(char c, const uint8_t *font)
       {
         int fwd = pgm_read_byte(font);
@@ -494,7 +576,7 @@
         return pgm_read_byte(font + 5 + c * len);
       }
 
-// =======================================================================
+    // =======================================================================
 
       int stringWidth(const char *s, const uint8_t *font)
       {
@@ -503,14 +585,14 @@
         return wd-1;
       }
 
-// =======================================================================
+    // =======================================================================
 
       int stringWidth(String str, const uint8_t *font)
       {
         return stringWidth(str.c_str(), font);
       }
 
-// =======================================================================
+    // =======================================================================
 
       int printCharX(char ch, const uint8_t *font, int x)
       {
@@ -530,7 +612,7 @@
         return w;
       }
 
-// =======================================================================
+      // =======================================================================
 
         void printChar(unsigned char c, const uint8_t *font)
         {
@@ -539,7 +621,7 @@
           xPos+=w+1;
         }
 
-// =======================================================================
+      // =======================================================================
 
           void printString(const char *s, const uint8_t *font)
           {
@@ -552,91 +634,37 @@
             printString(str.c_str(), font);
           }
 
-// =================time ======================================================
-void getNtpTime()
-{
- ntpClient.begin();
+// ================= getNtpTime  ======================================================
+    void getNtpTime()
+    {
+    ntpClient.begin();
 
-  if (!ntpClient.update()) {
+      if (!ntpClient.update()) {
     DEBUG(Serial.println("NTP update selhalo"));
     return;
-  }
+       }
 
-  // Uložení hodnot do tvých proměnných
-  time_t rawTime = ntpClient.getEpochTime();
-  struct tm* timeinfo = gmtime(&rawTime);
+    // Uložení hodnot do tvých proměnných
+        time_t rawTime = ntpClient.getEpochTime();
+        struct tm* timeinfo = gmtime(&rawTime);
 
-  h = timeinfo->tm_hour;
-  m = timeinfo->tm_min;
-  s = timeinfo->tm_sec;
-  day = timeinfo->tm_mday;
-  month = timeinfo->tm_mon + 1;
-  year = timeinfo->tm_year + 1900;
-  dayOfWeek = (timeinfo->tm_wday == 0) ? 7 : timeinfo->tm_wday; // 1 = pondělí, 7 = neděle
+        h = timeinfo->tm_hour;
+        m = timeinfo->tm_min;
+        s = timeinfo->tm_sec;
+        day = timeinfo->tm_mday;
+        month = timeinfo->tm_mon + 1;
+        year = timeinfo->tm_year + 1900;
+        dayOfWeek = (timeinfo->tm_wday == 0) ? 7 : timeinfo->tm_wday; // 1 = pondělí, 7 = neděle
 
-  localMillisAtUpdate = millis();
-  localEpoc = h * 3600 + m * 60 + s;
+        localMillisAtUpdate = millis();
+        localEpoc = h * 3600 + m * 60 + s;
 
-  DEBUG(Serial.println(String(h) + ":" + String(m) + ":" + String(s) + "  Date: " +
-                       day + "." + month + "." + year + " [" + dayOfWeek + "]"));
+        DEBUG(Serial.println(String(h) + ":" + String(m) + ":" + String(s) + "  Date: " +
+                              day + "." + month + "." + year + " [" + dayOfWeek + "]"));
 
-}
-
-
-   /*   void getTime()
-      {
-       // WiFiClient client;
-        DEBUG(Serial.print("connecting to www.google.com ...");)
-        if(!client.connect("www.google.com", 80)) {     //"ntp.nic.cz"    "www.google.com"
-          DEBUG(Serial.println("pripojeni spatne");)
-          return;                                  }
-
-        client.print(String("GET / HTTP/1.1\r\n") +
-                    String("Host: www.google.com\r\n") +   //"Host: www.google.com\r\n"
-                    String("Pripojeni: close\r\n\r\n"));
-
-        int repeatCounter = 10;
-        while (!client.available() && repeatCounter--) {
-          delay(200); DEBUG(Serial.println("y."));     }
-
-        String line;
-        client.setNoDelay(false);
-        int dateFound = 0;
-        while(client.connected() && client.available() && !dateFound) {
-          line = client.readStringUntil('\n');
-          line.toUpperCase();
-          // Date: Thu, 19 Nov 2015 20:25:40 GMT
-          if(line.startsWith("DATE: ")) {
-            localMillisAtUpdate = millis();
-            dateFound = 1;
-            date = line.substring(6, 22);
-            date.toUpperCase();
-            decodeDate(date);
-            //Serial.println(line);
-            h = line.substring(23, 25).toInt() + utcOffset; // + utcOffset; přidano GPT
-            m = line.substring(26, 28).toInt();
-            s = line.substring(29, 31).toInt();
-//-------------------------GPT---------------------
-      if (h >= 24) {
-      h -= 24;
-      day += 1;
-      // můžeš přidat i přepočet měsíce a roku, pokud chceš být přesný
-    }
-
-
-
-//--------------GPT--------------------------
-
-            DEBUG(Serial.println(String(h) + ":" + String(m) + ":" + String(s)+"   Date: "+day+"."+month+"."+year+" ["+dayOfWeek+"] "+(utcOffset)+"h");)
-            localEpoc = h * 60 * 60 + m * 60 + s;
-                                        }                           }
-        client.stop();
-     
-     
-      }
-*/
-// =======================================================================
-// decodes: day, month(1..12), dayOfWeek(1-Mon,7-Sun), year
+     }
+    // ===================== Den v Tydnu ==================================================
+      // decodes: day, month(1..12), dayOfWeek(1-Mon,7-Sun), year
       void decodeDate(String date)
       {
         switch(date.charAt(0)) {
@@ -663,48 +691,28 @@ void getNtpTime()
         year = date.substring(midx+4, midx+9).toInt();
         return;
       }
-
-// ================================ Letni čas =======================================
-    //  no
- // ============ podrogramy ========================
-
-
-    void updateTime()
-     {
-  long curEpoch = localEpoc + ((millis() - localMillisAtUpdate) / 1000);
- // long temp_value_2 = round(curEpoch  * (utcOffset) + 86400L); // long temp_value_2 = round(curEpoch +3600 * (utcOffset) + 86400L);
-  long epoch = (long)(round(curEpoch  * utcOffset + 86400L)) % 86400L;  // long epoch = (long)(round(curEpoch + 3600 * utcOffset + 86400L)) % 86400L;
- // long epoch = temp_value_2 % 86400L;
-
-  h = ((epoch  % 86400L) / 3600) % 24;
-  m = (epoch % 3600) / 60;
-  s = epoch % 60;
     
-   //  if (h >= 24) {
-   //   h -= 24;
-    //  day += 1;
+//----------------updateTime---- GPT --------------------------------
+ 
+        void updateTime()
+        {
+          time_t now = time(nullptr);
+          struct tm* timeinfo = localtime(&now);
 
-  //---------------------------------------------
+          if (timeinfo == nullptr) return;
 
-   /*    
-    Serial.println(day);
-   // Serial.println(weekNames);
-    Serial.println(dayOfWeek);
-    //Serial.printf("%02d:%02d:%02d\n");
-  
-      Serial.println("UTC time from Google:");
-      Serial.printf("%02d:%02d:%02d\n", h - utcOffset, m, s);
-      Serial.println("Local time:");
-      Serial.printf("%02d:%02d:%02d\n", h, m, s);
-    */ 
-//----------------------------------------------------------
+          h = timeinfo->tm_hour;
+          m = timeinfo->tm_min;
+          s = timeinfo->tm_sec;
+          day = timeinfo->tm_mday;
+          month = timeinfo->tm_mon + 1;
+          year = timeinfo->tm_year + 1900;
+          dayOfWeek = (timeinfo->tm_wday == 0) ? 7 : timeinfo->tm_wday;
+        }  // nesahat  ----konec updateTime 
 
-    }  
-// =======================================================================
+    // =====================podprogramy=========================================
 
-
-
-      void showDigit(char ch, int col, const uint8_t *data)
+     void showDigit(char ch, int col, const uint8_t *data)
       {
         if(dy<-8 | dy>8) return;
         int len = pgm_read_byte(data);
@@ -717,7 +725,7 @@ void getNtpTime()
                                           }
       }
  
-// =======================================================================
+      // =======================================================================
 
       void setCol(int col, byte v)
       {
@@ -727,7 +735,7 @@ void getNtpTime()
           if(!dy) scr[col] = v; else scr[col] |= dy>0 ? v>>dy : v<<-dy;
       }
 
-// =======================================================================
+      // =======================================================================
 
       int showChar(char ch, const uint8_t *data)
       {
@@ -739,7 +747,7 @@ void getNtpTime()
         return w;
       }
 
-// =======================================================================
+      // =======================================================================
 
         void printCharWithShift(unsigned char c, int shiftDelay) {
           
@@ -751,17 +759,17 @@ void getNtpTime()
             scrollLeft();
             refreshAll();          }                            }
 
-// =======================================================================
+      // =======================================================================
 
       void printStringWithShift(const char* s, int shiftDelay){
         while (*s) {
           printCharWithShift(*s, shiftDelay);
           s++;     }                                          }
-   //=============== konec ============================
+      //===================================================================
 
 
-    //***************vychod a zapad slunce ********
-         // -----Propočet času HH:mm format
+       //******vychod a zapad slunce ----Propočet času HH:mm format
+         
         char * hoursToString(double h, char *str)
         {
           int m = int(round(h * 60));
